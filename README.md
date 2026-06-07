@@ -26,7 +26,7 @@ Before writing a single line of DDL (Data Definition Language), a raw exploratio
 #### 1. Inspecting the Raw Source File
 To evaluate the incoming structure, the raw comma-separated values (CSV) database file was inspected using a simple plain-text editor. 
 
-![Raw CSV File Inspection](./images/Img_001.png)
+![Raw CSV File Inspection](./images/Img 001.png)
 
 **Key Observations from the Raw File:**
 * **Schema Design Mapping:** The file is a flat table containing mixed structural fields. Columns like `user_id`, `product_id`, and `seller_id` are combined with transactional metrics like `price` and `final_price` in a single line.
