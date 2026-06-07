@@ -63,7 +63,7 @@ To guarantee data integrity before proceeding to structural normalization, a `SE
 | :---: |
 | ![Staging Data Preview Part 1](./images/Img004.png) |
 
-| Right Schema Boundary View (Columns 13-22) |
+| Right Schema Boundary View (Columns 10-21) |
 | :---: |
 | ![Staging Data Preview Part 2](./images/Img005.png) |
 
