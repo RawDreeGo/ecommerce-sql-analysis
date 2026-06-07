@@ -42,3 +42,32 @@ With the structure of the CSV understood, the next step was to map those fields 
 * **Strict Type Mapping:** Fields like `price`, `discount`, and `final_price` were explicitly assigned the `NUMERIC(10, 2)` data type instead of a standard `FLOAT`. This guarantees decimal precision for currency calculations and prevents rounding errors during financial aggregations.
 * **Date and Boolean Formatting:** Temporal data was cast directly into a strict `DATE` type, while binary flags like `is_returned` were handled using PostgreSQL's native `BOOLEAN` type (`True`/`False`), facilitating faster indexing and logical evaluations later on.
 * **Landing Zone Strategy:** This staging table was purposely built without active Foreign Key constraints or Primary Key restrictions. This design choice prevents ingestion failures, ensuring that the entire raw file can be swallowed as-is before any deep normalization or heavy data cleaning takes place.
+
+#### 3. Optimized Bulk Data Ingestion via COPY
+Instead of utilizing standard row-by-row `INSERT` statements—which would cause significant latency and overhead on a high-volume dataset—I leveraged PostgreSQL's highly efficient native bulk loading tool using the `COPY` command. 
+
+![Bulk Data Ingestion](./images/Img003.png)
+
+**Key Performance & Ingestion Insights:**
+* **Native Speed Execution:** The `COPY` protocol streams data directly between the server and the filesystem file, resulting in an exceptionally fast ingestion time of just **5 seconds and 911 milliseconds** to pull in all **1,000,000 records**.
+* **Ingestion Metadata Parameters:** 
+  * `FORMAT CSV`: Tells the engine to expect standard CSV layout formatting.
+  * `HEADER TRUE`: Instructs PostgreSQL to safely skip the very first row since it contains the text column headers.
+  * `DELIMITER ','`: Specifies commas as the clean separator boundary between each explicit column field value.
+* **Landing Success Confirmation:** The output console cleanly returns `COPY 1000000`, confirming that the entire payload was written into the staging schema with zero data truncation, structural misalignment, or corrupted fields.
+
+#### 4. Post-Ingestion Structural Verification
+To guarantee data integrity before proceeding to structural normalization, a `SELECT *` query was executed with a `LIMIT 10` constraint. Because the staging table contains 22 columns, the results are captured across two continuous views to audit the entire dataset payload width.
+
+| Left Schema Boundary View (Columns 1-12) |
+| :---: |
+| ![Staging Data Preview Part 1](./images/Img004.png) |
+
+| Right Schema Boundary View (Columns 13-22) |
+| :---: |
+| ![Staging Data Preview Part 2](./images/Img005.png) |
+
+**Key Validation Benchmarks Accomplished:**
+* **Data Alignment Verification:** Checking columns from `user_id` down to `delivery_status` confirms that the data stream aligned perfectly into its corresponding SQL types without shifting columns or placing values in the wrong fields.
+* **Format Stability Check:** Temporal records (such as `2025-03-04`) successfully adapted to the ISO `DATE` format, and boolean operational flags properly translated to clean system-level `true`/`false` values.
+* **Data Quality Assessment:** This quick look exposes the flat, non-normalized nature of our landing zone—revealing repetitive string attributes (like locations, categories, and brands) duplicating across rows. This visual evidence justifies the immediate need for transitioning into an optimized relational Star Schema model.
