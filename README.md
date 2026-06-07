@@ -17,3 +17,18 @@ This analytical suite directly targets three critical corporate challenges:
 3. **Cumulative Growth Velocity:** Providing corporate leadership with real-time running totals of revenue generation across major product segments to measure progress against annual benchmarks.
 
 ---
+## 🛠️ Step-by-Step Implementation Guide
+
+### Phase 1: Exploratory Data Inspection & Staging
+
+Before writing a single line of DDL (Data Definition Language), a raw exploration of the source file is essential. Understanding data types, null tendencies, and column delimiters prevents schema failure down the line.
+
+#### 1. Inspecting the Raw Source File
+To evaluate the incoming structure, the raw comma-separated values (CSV) database file was inspected using a simple plain-text editor. 
+
+![Raw CSV File Inspection](./images/Img_001.png)
+
+**Key Observations from the Raw File:**
+* **Schema Design Mapping:** The file is a flat table containing mixed structural fields. Columns like `user_id`, `product_id`, and `seller_id` are combined with transactional metrics like `price` and `final_price` in a single line.
+* **Data Types Identification:** Categorical entries (`category`, `subcategory`, `device`) appear as text, while tracking numbers and counts (`review_count`, `stock`) are structured as discrete integers.
+* **Data Quality Constraints:** Currency fields feature precise decimals, demanding numeric casting rather than floats to maintain absolute financial precision. This inspection directly guided the creation of our optimized staging schema.
