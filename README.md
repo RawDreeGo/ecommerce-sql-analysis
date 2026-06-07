@@ -71,3 +71,118 @@ To guarantee data integrity before proceeding to structural normalization, a `SE
 * **Data Alignment Verification:** Checking columns from `user_id` down to `delivery_status` confirms that the data stream aligned perfectly into its corresponding SQL types without shifting columns or placing values in the wrong fields.
 * **Format Stability Check:** Temporal records (such as `2025-03-04`) successfully adapted to the ISO `DATE` format, and boolean operational flags properly translated to clean system-level `true`/`false` values.
 * **Data Quality Assessment:** This quick look exposes the flat, non-normalized nature of our landing zone—revealing repetitive string attributes (like locations, categories, and brands) duplicating across rows. This visual evidence justifies the immediate need for transitioning into an optimized relational Star Schema model.
+
+### Phase 2: Relational Star Schema Architecture
+
+With the staging table validated, the next phase was to deconstruct the flat dataset into an optimized, transactional **Star Schema**. This process ensures data normalization, eliminates redundancy, and drastically improves analytical query performance.
+
+#### 5. Structuring Dimension Tables (`dim_users` & `dim_products`)
+To establish a single source of truth, I executed DDL scripts to create separate dimension tables for entities that handle categorical data. 
+
+| Creating Customer Dimension Schema |
+| :---: |
+| ![User Dimension Table Creation](./images/Img006.png) |
+
+| Creating Product Catalog Dimension Schema |
+| :---: |
+| ![Product Dimension Table Creation](./images/Img007.png) |
+
+**Key Architectural Guardrails Implemented:**
+* **Enforcing Entity Constraints:** In `dim_users`, `user_id` was declared as the `PRIMARY KEY`. In `dim_products`, `product_id` was given the same rule. This forces the database engine to guarantee absolute uniqueness per record, making it impossible to insert duplicate entities.
+* **Storage Optimization:** Highly repetitive text attributes—like `location` for users or `category`, `subcategory`, and `brand` for products—are now completely isolated into their own independent catalogs. 
+* **Data Integrity Preparation:** Isolating these descriptive characteristics ensures that our central fact table will only need to store compact alpha-numeric codes (IDs) rather than heavy, repeating text blocks, optimizing index performance.
+
+#### 6. Structuring `dim_sellers` and the Central `fact_orders` Table
+To complete the Star Schema framework, I defined the final dimension table for vendors and constructed the heavy operational hub of our database architecture: the central fact table.
+
+| Creating Vendor Dimension Schema |
+| :---: |
+| ![Seller Dimension Table Creation](./images/Img008.png) |
+
+| Creating Central Fact Table Schema |
+| :---: |
+| ![Fact Table Creation with Constraints](./images/Img009.png) |
+
+**Key Architectural Guardrails Implemented:**
+* **Establishing Relational Boundaries:** In `fact_orders`, fields like `user_id`, `product_id`, and `seller_id` are explicitly declared with `REFERENCES` tags pointing back to their parent dimension tables. These **Foreign Keys** preserve strict referential integrity across the 1,000,000 transactions.
+* **Data Quality Logic Guardrail:** A hard `CONSTRAINT` named `chk_price_logic` was coded into the table setup via a `CHECK (final_price <= price)` verification. This engine-level filter automatically blocks any erroneous inputs where the discounted or promotional final price accidentally exceeds the base retail price.
+* **Granular Numeric Precision:** Financial variables and customer metrics (`rating`, `review_count`, `stock_at_purchase`) are built with narrow, descriptive numerical categories, reducing storage footprints while handling high-throughput aggregations seamlessly.
+
+### Phase 3: ETL, Data Migration & Relational Linkage
+
+Once the dimensions were isolated and populated, the next phase was to execute the primary transformation and migration script to load the transactional hub of our relational model.
+
+#### 7. Migrating the Core Transactional Layer
+Using a comprehensive sub-select strategy, I mapped the raw staging attributes directly into the columns of our relational fact schema.
+
+![Fact Table Migration Script](./images/Img010.png)
+
+**Key Operational Details in this Step:**
+* **Mapping Relational Keys:** This query pulls transactional data from the staging environment and seamlessly maps the alphanumeric user, product, and seller IDs. Because these dimensions were previously cleaned and unique-indexed, this query acts as the vital bridge linking the facts to the dimensions.
+* **Column Realignment:** During the selection process, attributes such as raw stock figures were cleanly mapped into the target `stock_at_purchase` column, establishing a reliable, structured snapshot of operational metrics at the exact point of sale.
+* **Integrative Query Pattern:** Structuring this data flow using an explicit `INSERT INTO ... SELECT` block ensures that the entire payload streams directly from server cache to disk table without row-by-row memory bottlenecks, preserving fast execution times.
+
+#### 8. Relational Validation & Multi-Table Join Test
+To conclude the data migration phase, a multi-table `JOIN` query was executed to verify that the primary/foreign key mappings between the central fact table and isolated dimensions were functional.
+
+![Relational Join Validation](./images/Img011.png)
+
+**Key Integration Benchmarks Validated:**
+* **Flawless Relational Communication:** By joining `fact_orders` with `dim_users` and `dim_products` on their respective ID keys, the query successfully fetched attributes like user `location` and product `brand` alongside transactional financial values.
+* **Schema Integrity Confirmed:** The output data grid displays a clean, sequential `order_id` (acting as the serial primary key) paired with completely aligned dimensional values, proving that no records were dropped or mismatched during the normalization process.
+* **Production-Ready Status:** Having a successfully integrated Star Schema means the warehouse structure is now fully optimized to handle intensive business intelligence operations, shifting the project focus to advanced data analytics.
+
+  ### Phase 4: Advanced Business Intelligence Queries
+
+With a fully validated Star Schema data warehouse, I executed advanced SQL analytical scripts to uncover critical trends, financial risks, and optimization opportunities for executive decision-making.
+
+#### 9. Advanced Analysis 1: User Retention & Omnichannel Repurchase Cycles
+* **Business Problem:** The Growth Marketing team needed to track user purchase frequency patterns and understand how long it takes for a customer to make a repeat purchase across different purchasing devices (Mobile App, Web, Tablet).
+* **SQL Technique Used:** A Common Table Expression (CTE) utilizing the native window function `LAG()` partitioned by `user_id` and ordered chronologically by `purchase_date`. This isolates sequential transaction timelines for every single customer profile.
+
+![Omnichannel Repurchase Cycle Query](./images/Img012.png)
+
+**Key Operational Insights and Data Discoveries:**
+* **Absolute Omnichannel Consistency:** The data uncovers incredibly uniform purchase behaviors across all channels. Recurrent transactions are divided almost equally among the Mobile App (~402k), Web (~401k), and Tablet (~401k) segments.
+* **The 55-Day Consumer Trend:** Strikingly, the average time interval between successful repeat orders lands exactly between **55.0 and 55.2 days** across all platforms. This reveals a very rigid bi-monthly customer consumption habit.
+* **Marketing Action Item:** Instead of running generalized promotional campaigns, the growth team can use this metric to trigger automated, hyper-targeted push notifications or promotional emails around Day 45 post-purchase—directly intervening to shorten the natural repurchase window and accelerate customer lifetime value (LTV).
+
+#### 10. Advanced Analysis 2: Revenue Leakage Control (Financial Risk Audit)
+* **Business Problem:** The Finance and Operations teams needed to identify which product categories and manufacturing brands were causing severe profit drains due to customer item returns, focusing only on suppliers with a statistically significant transaction volume.
+* **SQL Technique Used:** Conditional aggregation leveraging `SUM(CASE WHEN ...)` to isolate return metrics, combined with a `HAVING COUNT(f.order_id) > 500` clause to filter out low-volume statistical anomalies.
+
+![Revenue Leakage Analytics Query](./images/Img013.png)
+
+**Key Operational Insights and Data Discoveries:**
+* **The High-Return Threshold:** Across the top underperforming segments, product return rates are deeply stagnant, hovering between **11.35% and 11.89%**. 
+* **The Billion-Dollar Bottleneck:** The absolute highest financial leak is happening in the **Sports** category under the **Zara** brand. Out of roughly 117k orders, over 136k products were returned, resulting in a staggering **$1,310,217,854.32 USD** in completely lost gross revenue. 
+* **Strategic Corporate Recommendation:** A rigorous operational quality audit is immediately required for the top 3 critical leaks: *Zara (Sports)*, *Sony (Sports)*, and *Samsung (Sports)*. Implementing a supplier quality gate or adjusting product descriptions to lower these return rates by just 2% would instantly recover hundreds of millions of dollars in net cash flow.
+
+#### 11. Advanced Analysis 3: Commercial Growth Trajectory (Running Total Analysis)
+* **Business Problem:** Corporate leadership requested a financial engine to monitor chronological sales velocity. They needed to evaluate month-over-month revenue performance and track cumulative historical running totals across different product categories to visualize growth speed.
+* **SQL Technique Used:** A nested analytical approach combining a Common Table Expression (CTE) with time truncation (`DATE_TRUNC`). The outer query utilizes a cumulative window function `SUM(ingresos_del_mes) OVER(PARTITION BY category ORDER BY mes)` to accumulate revenue step-by-step over time.
+
+![Commercial Growth Velocity Query](./images/Img014.png)
+
+**Key Engineering Elements within the Script:**
+* **Temporal Truncation Optimization:** Utilizing `DATE_TRUNC('month', f.purchase_date)::DATE` cleanly normalizes random daily transaction timestamps into unified monthly landing baselines (e.g., grouping all individual March sales under a single starting date banner).
+* **Strict Quality Safeguard:** By declaring `WHERE f.is_returned = FALSE`, the script filters out canceled or returned goods before running the revenue calculations, ensuring corporate leadership receives metrics based purely on real cash flow.
+* **Partition Isolated Windowing:** Adding `PARTITION BY category` guarantees that the running total calculates independently for each business vertical, smoothly resetting the financial accumulation when moving from one category to the next.
+
+#### 12. Chronological Output Logs & Analysis Validation
+To confirm the operational execution of the time-series engine, the query output logs were extracted to audit the rolling accumulation values across distinct categorical shifts.
+
+![Running Total Query Output Grid](./images/Img015.png)
+
+**Key Business Observations from the Output Grid:**
+* **Flawless Partition Resets:** The data grid proves the window function isolates its scope perfectly. Notice how the `ingresos_acumulados_historicos` column continuously increments month-over-month for the **Beauty** sector (from `$2,486.10` up to `$68,554.00`). Then, the moment the table hits row 14 and transitions to **Clothing**, the running total smoothly resets back to its true initial baseline of `$14,439.08`.
+* **Velocity Insights:** The data exposes massive seasonal scaling. For example, within the **Clothing** vertical, revenue jumped from `$14k` in March 2024 to an explosive `$72k` in April, showcasing a massive commercial acceleration window that operations must plan around for inventory management.
+* **Rapid Server Execution:** Processing complex analytical window partition matrices across a heavy multi-table join structure took the database engine an incredibly lean **912 milliseconds** to completely compute, validate, and return.
+
+---
+
+## 🏁 Final Project Takeaways & System Metrics
+By constructing this data architecture, the operational pipeline achieved massive benchmarks:
+* **Storage Optimization:** Normalizing a flat 1,000,000+ record spreadsheet into a structured **Star Schema** eliminated duplicate data strings, drastically minimizing database cluster storage footprints.
+* **Blazing Fast Analytics:** By pre-cleaning categorical keys during the ETL phase and utilizing optimized native PostgreSQL query structures, high-impact business intelligence aggregations compute in sub-second timelines.
+* **Production Reliability:** Hard structural foreign keys and custom check constraints block schema failures at the engine level, guaranteeing clean, pristine data delivery for executive stakeholders.
